@@ -1,0 +1,60 @@
+http:
+  timeout_seconds: 20
+  retries: 3
+  backoff_seconds: 0.5
+  user_agent: "world-state-personal-research/0.1 (set WORLD_STATE_CONTACT for contact)"
+
+sources:
+  synthetic:
+    enabled: true
+    scheduled: false
+    cadence_minutes: 0
+
+  eccc:
+    enabled: true
+    scheduled: true
+    cadence_minutes: 10
+    endpoint: "https://api.weather.gc.ca/collections/swob-realtime/items"
+    stations: [CYYZ, CYUL, CYVR, CYYC, CYWG]
+
+  nws:
+    enabled: true
+    scheduled: true
+    cadence_minutes: 10
+    endpoint: "https://api.weather.gov/stations/{station}/observations/latest"
+    stations: [KSEA, KSFO, KLAX, KDEN, KDFW, KORD, KATL, KJFK, KBOS, KMIA]
+
+  rtma:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 60
+
+  hrrr:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 60
+
+  goes:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 5
+
+  firms:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 15
+
+  openaq:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 15
+
+  usgs:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 10
+
+  eia:
+    enabled: false
+    scheduled: false
+    cadence_minutes: 60

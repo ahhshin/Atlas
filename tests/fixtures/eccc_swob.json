@@ -1,0 +1,32 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "id": "2026-08-29-1800-CYYZ-AUTO-swob.xml",
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-79.63, 43.68, 173.0]},
+      "properties": {
+        "id": "2026-08-29-1800-CYYZ-AUTO-swob.xml",
+        "date_tm-value": "2026-08-29T18:00:00Z",
+        "processed_date_tm": "2026-08-29T18:02:00Z",
+        "stn_nam-value": "TORONTO PEARSON",
+        "tc_id-value": "YYZ",
+        "air_temp": 24.4,
+        "air_temp-uom": "°C",
+        "air_temp-qa": 100,
+        "dwpt_temp": 14.8,
+        "dwpt_temp-uom": "°C",
+        "rel_hum": 55,
+        "rel_hum-uom": "%",
+        "stn_pres": 978.1,
+        "stn_pres-uom": "hPa",
+        "avg_wnd_spd_10m_pst10mts": 7.2,
+        "avg_wnd_spd_10m_pst10mts-uom": "km/h",
+        "avg_wnd_dir_10m_pst10mts": 238,
+        "avg_wnd_dir_10m_pst10mts-uom": "°",
+        "pcpn_amt_pst1hr": null,
+        "pcpn_amt_pst1hr-uom": "mm"
+      }
+    }
+  ]
+}

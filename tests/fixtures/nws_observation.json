@@ -1,0 +1,18 @@
+{
+  "id": "https://api.weather.gov/stations/KJFK/observations/2026-08-29T17:51:00+00:00",
+  "type": "Feature",
+  "geometry": {"type": "Point", "coordinates": [-73.78, 40.65]},
+  "properties": {
+    "@id": "https://api.weather.gov/stations/KJFK/observations/2026-08-29T17:51:00+00:00",
+    "stationId": "KJFK",
+    "stationName": "New York, Kennedy International Airport",
+    "timestamp": "2026-08-29T17:51:00+00:00",
+    "temperature": {"unitCode": "wmoUnit:degC", "value": 25, "qualityControl": "V"},
+    "dewpoint": {"unitCode": "wmoUnit:degC", "value": 10, "qualityControl": "V"},
+    "windDirection": {"unitCode": "wmoUnit:degree_(angle)", "value": 40, "qualityControl": "V"},
+    "windSpeed": {"unitCode": "wmoUnit:km_h-1", "value": 9.36, "qualityControl": "V"},
+    "barometricPressure": {"unitCode": "wmoUnit:Pa", "value": 102370, "qualityControl": "V"},
+    "precipitationLastHour": {"unitCode": "wmoUnit:mm", "value": null, "qualityControl": "Z"},
+    "relativeHumidity": {"unitCode": "wmoUnit:percent", "value": 38.8, "qualityControl": "V"}
+  }
+}

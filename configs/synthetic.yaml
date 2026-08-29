@@ -1,0 +1,7 @@
+seed: 42
+frequency_hours: 6
+periods: 80
+latitudes: [25, 49, 2]
+longitudes: [-124, -67, 3]
+forecast_horizons_hours: [6, 12, 24, 48]
+
