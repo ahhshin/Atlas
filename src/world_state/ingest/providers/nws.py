@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from world_state.ingest.artifacts import PointBatch
 from world_state.ingest.base import DataClass, DataSource, NormalizedPoint, RawPayload, utc_datetime
 from world_state.ingest.http import get_json_bytes
 
@@ -62,7 +63,7 @@ class NWSProvider(DataSource):
             raise RuntimeError("; ".join(self.fetch_errors))
         return payloads
 
-    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[NormalizedPoint]:
+    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[PointBatch]:
         records: list[NormalizedPoint] = []
         for payload in payloads:
             feature: dict[str, Any] = json.loads(payload.content)
@@ -100,4 +101,4 @@ class NWSProvider(DataSource):
                         station_name=properties.get("stationName"),
                     )
                 )
-        return records
+        return [PointBatch(tuple(records))] if records else []

@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 import httpx
 
 from world_state.config import load_config
+from world_state.ingest.base import utc_datetime
+from world_state.ingest.catalog import AtlasCatalog
 from world_state.ingest.ledger import IngestionLedger
 from world_state.ingest.registry import create_provider, implemented_providers
 from world_state.ingest.runner import run_provider
-from world_state.ingest.storage import PointObservationStore, RawArchive
+from world_state.ingest.storage import RawArchive, StorageRouter
 
 
 def configure_logging() -> None:
@@ -23,7 +25,8 @@ def fetch_sources(names: list[str]) -> int:
     timeout = float(config.get("http", {}).get("timeout_seconds", 20))
     ledger = IngestionLedger()
     archive = RawArchive()
-    store = PointObservationStore()
+    catalog = AtlasCatalog()
+    router = StorageRouter(catalog=catalog)
     outcomes = []
     with httpx.Client(timeout=timeout, follow_redirects=True) as client:
         for name in names:
@@ -33,7 +36,7 @@ def fetch_sources(names: list[str]) -> int:
                 client=client,
                 ledger=ledger,
                 raw_archive=archive,
-                point_store=store,
+                storage_router=router,
                 now=datetime.now(UTC),
             )
             outcomes.append(outcome)
@@ -55,18 +58,53 @@ def show_health() -> int:
     return 0
 
 
+def show_catalog(table: str) -> int:
+    frame = AtlasCatalog().table(table)
+    print("No catalog entries" if frame.empty else frame.to_string(index=False))
+    return 0
+
+
+def show_state_at(timestamp: str) -> int:
+    moment = utc_datetime(timestamp)
+    state = AtlasCatalog().assets_available_at(moment)
+    print(f"state_at={moment.isoformat()}")
+    for artifact_type, frame in state.items():
+        print(f"{artifact_type}={len(frame)}")
+    return 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="World State public-data ingestion")
+    parser = argparse.ArgumentParser(description="Atlas public-data ingestion")
     subparsers = parser.add_subparsers(dest="command", required=True)
     fetch_parser = subparsers.add_parser(
         "fetch", help="Fetch one provider or all enabled providers"
     )
     fetch_parser.add_argument("source", choices=[*implemented_providers(), "all"])
     subparsers.add_parser("health", help="Show ingestion-ledger health")
+    catalog_parser = subparsers.add_parser("catalog", help="Inspect an artifact catalog table")
+    catalog_parser.add_argument(
+        "table",
+        choices=[
+            "latest_point_state",
+            "point_partitions",
+            "grid_assets",
+            "forecast_runs",
+            "event_assets",
+            "source_freshness",
+        ],
+    )
+    state_parser = subparsers.add_parser(
+        "state-at", help="Count artifacts that were actually available at an ISO-8601 time"
+    )
+    state_parser.add_argument("timestamp")
     args = parser.parse_args()
     configure_logging()
     if args.command == "health":
         return show_health()
+    if args.command == "catalog":
+        return show_catalog(args.table)
+    if args.command == "state-at":
+        return show_state_at(args.timestamp)
     config = load_config()
     names = (
         [

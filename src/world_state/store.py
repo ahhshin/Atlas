@@ -3,8 +3,10 @@ from __future__ import annotations
 import duckdb
 import pandas as pd
 import xarray as xr
+from shapely import from_wkb
+from shapely.geometry import mapping
 
-from world_state.ingest.storage import PointObservationStore
+from world_state.ingest.catalog import AtlasCatalog
 from world_state.paths import FORECASTS_PATH, METRICS_PATH, OBSERVATIONS_PATH
 
 
@@ -42,29 +44,14 @@ def load_metrics() -> pd.DataFrame:
 def load_latest_point_observations(
     *, source: str | None = None, variable: str | None = None
 ) -> pd.DataFrame:
-    files = PointObservationStore().parquet_files()
-    if not files:
+    frame = AtlasCatalog().table("latest_point_state")
+    if frame.empty:
         return pd.DataFrame()
-    conditions: list[str] = []
-    params: list[object] = [[str(path) for path in files]]
     if source:
-        conditions.append("source = ?")
-        params.append(source)
+        frame = frame.loc[frame.source == source]
     if variable:
-        conditions.append("variable = ?")
-        params.append(variable)
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    return duckdb.sql(
-        f"""
-        SELECT * FROM read_parquet(?, union_by_name=true)
-        {where}
-        QUALIFY row_number() OVER (
-            PARTITION BY source, station_id, variable ORDER BY valid_time DESC, ingested_at DESC
-        ) = 1
-        ORDER BY source, station_name, variable
-        """,
-        params=params,
-    ).df()
+        frame = frame.loc[frame.variable == variable]
+    return frame.sort_values(["source", "station_name", "variable"], na_position="last")
 
 
 def load_station_snapshot(source: str, station_id: str) -> pd.DataFrame:
@@ -79,3 +66,18 @@ def available_live_sources() -> list[str]:
     if observations.empty:
         return []
     return sorted(observations.loc[observations.data_class != "synthetic", "source"].unique())
+
+
+def load_catalog_table(name: str) -> pd.DataFrame:
+    return AtlasCatalog().table(name)
+
+
+def load_grid_asset(path: str) -> xr.Dataset:
+    return xr.open_zarr(path, consolidated=True)
+
+
+def load_event_asset(path: str) -> pd.DataFrame:
+    frame = pd.read_parquet(path)
+    if "geometry" in frame:
+        frame["geometry"] = [mapping(from_wkb(value)) for value in frame.geometry]
+    return frame

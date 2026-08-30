@@ -2,12 +2,36 @@ from __future__ import annotations
 
 from world_state.config import source_config
 from world_state.ingest.base import DataSource
-from world_state.ingest.providers import ECCCProvider, NWSProvider, SyntheticProvider
+from world_state.ingest.providers import (
+    AirNowProvider,
+    ECCCProvider,
+    EiaProvider,
+    FirmsProvider,
+    GoesProvider,
+    HrrrProvider,
+    MetarProvider,
+    MrmsProvider,
+    NWSProvider,
+    ProbSevereProvider,
+    RtmaProvider,
+    SyntheticProvider,
+    UsgsProvider,
+)
 
 PROVIDERS: dict[str, type[DataSource]] = {
     "synthetic": SyntheticProvider,
     "eccc": ECCCProvider,
     "nws": NWSProvider,
+    "metar": MetarProvider,
+    "rtma": RtmaProvider,
+    "mrms": MrmsProvider,
+    "probsevere": ProbSevereProvider,
+    "hrrr": HrrrProvider,
+    "goes": GoesProvider,
+    "usgs": UsgsProvider,
+    "firms": FirmsProvider,
+    "airnow": AirNowProvider,
+    "eia": EiaProvider,
 }
 
 

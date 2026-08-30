@@ -1,51 +1,56 @@
-# World State
+# Atlas
 
-World State is a personal research platform for collecting environmental observations, retaining
-their provenance, and evaluating compact forecasting models. It has two intentionally separate
-paths:
+Atlas is a local-first multimodal environmental data platform and forecasting-research sandbox.
+It continuously retains the weather information that was actually available at a given time,
+while keeping deterministic synthetic data as an explicit offline development mode.
 
-- continuously collected public observations for a live world-state view and future point-in-time
-  evaluation;
-- deterministic synthetic gridded data for offline development, GUI demos, and baseline tests.
+The project is deliberately small-infrastructure: Python, Streamlit, Parquet, Zarr, and DuckDB.
+There is no message broker, orchestrator, or distributed database.
 
-Synthetic values are never silently presented as observations.
+## Current capabilities
+
+| Source | Artifact | Class | Initial bounded scope |
+| --- | --- | --- | --- |
+| NOAA Aviation Weather METAR | `PointBatch` | `OBSERVED` | Bulk current cache, filtered to North America |
+| NOAA RTMA | `GridField` | `ANALYZED` | CONUS temperature, dew point, humidity, pressure and wind |
+| NOAA MRMS | `GridField` | `ANALYZED` | Reflectivity, precipitation rate, one-hour QPE and MESH |
+| NOAA ProbSevere | `EventCollection` | `ANALYZED` | Current CONUS storm polygons and severe/hail/wind/tornado probabilities |
+| NOAA HRRR | `ForecastField` | `FORECAST` | Every collected cycle at +1/+3/+6/+12 h; extended cycles at +24/+48 h |
+| NOAA GOES-19 | `GridField` + `EventCollection` | `OBSERVED` | ABI C08/C13 brightness temperature and five-minute GLM flashes |
+| USGS NWIS | `PointBatch` | `OBSERVED` | Current streamflow and gauge height at configured research gauges |
+| NASA FIRMS | `EventCollection` | `OBSERVED` | VIIRS active-fire detections; requires `FIRMS_MAP_KEY` |
+| EPA AirNow | `PointBatch` | `OBSERVED` | Hourly criteria-pollutant observations; requires `AIRNOW_API_KEY` |
+| EIA | `PointBatch` | `OBSERVED` | Hourly balancing-authority demand/net generation; requires `EIA_API_KEY` |
+| ECCC SWOB | `PointBatch` | `OBSERVED` | Existing configured Canadian stations, retained for compatibility |
+| NWS stations | `PointBatch` | `OBSERVED` | Existing adapter retained but disabled in favor of bulk METAR |
+| Synthetic generator | `PointBatch` plus lab artifacts | `SYNTHETIC` | Deterministic coarse CONUS development fixture |
+
+OpenAQ and gridded National Water Model data remain follow-on providers; AirNow and USGS provide
+the initial air-quality and hydrology modalities.
 
 ## Architecture
 
 ```text
-ECCC / NWS / synthetic
-        │
-        ▼
-provider fetch + normalize
-        │
-        ├── immutable raw response archive
-        ├── normalized point observations (Parquet)
-        └── ingestion runs and freshness (DuckDB)
-                          │
-                          ▼
-                    Streamlit GUI
-
-synthetic generator ──► Zarr + forecast Parquet ──► experiments / demo forecast
+public source
+    │
+    ├── fetch source-native bytes ──► immutable raw archive + request metadata
+    │
+    └── normalize
+          ├── PointBatch ──────────► partitioned Parquet
+          ├── GridField ───────────► xarray / Zarr
+          ├── ForecastField ───────► immutable cycle+horizon Zarr
+          └── EventCollection ─────► GeoParquet
+                                      │
+                                      ▼
+                    DuckDB IDs, current state, asset catalog,
+                    forecast runs, freshness, and ingestion ledger
+                                      │
+                                      ▼
+                            Atlas State Explorer
 ```
 
-The GUI only reads normalized stores. It never calls a public API during page rendering. The
-ingestion worker is a separate process, so a source outage does not prevent the app from loading
-the last valid data.
-
-## Data sources
-
-| Source | State | Class | Current scope |
-| --- | --- | --- | --- |
-| Synthetic | Implemented | `SYNTHETIC` | Deterministic coarse CONUS grid |
-| ECCC GeoMet SWOB | Implemented | `OBSERVED` | Five configured Canadian stations |
-| NOAA/NWS API | Implemented | `OBSERVED` | Ten configured US stations |
-| NOAA RTMA | Planned | `ANALYZED` | CONUS gridded current state |
-| NOAA HRRR | Planned | `FORECAST` | Retained cycles at +6/+12/+24/+48 h where available |
-| GOES, FIRMS, OpenAQ, USGS, EIA | Planned | Varies | Added incrementally after gridded weather |
-| ERA5 | Planned backfill | Reanalysis/`ANALYZED` | Historical ML training, never live |
-
-ECCC and NWS are live only after the ingestion command has succeeded. The Data Feeds page reports
-that fact from the ledger; it does not fabricate source status.
+The Streamlit process never calls a public API. Collection runs independently, so the UI can keep
+serving the last valid state during a source outage.
 
 ## Setup
 
@@ -55,106 +60,138 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
-Set a contact string for the NWS `User-Agent` header. A repository URL or email is suitable:
+`cfgrib` and the Python `eccodes` wheels decode the bounded NOAA GRIB2 responses; a separate
+`wgrib2` installation is not required.
+
+## Ingest live data
+
+Each implemented source has an explicit CLI target:
 
 ```bash
-export WORLD_STATE_CONTACT='https://github.com/your-name/world-state'
+world-state-ingest fetch metar
+world-state-ingest fetch rtma
+world-state-ingest fetch mrms
+world-state-ingest fetch probsevere
+world-state-ingest fetch hrrr
+world-state-ingest fetch goes
+world-state-ingest fetch usgs
+world-state-ingest fetch firms     # FIRMS_MAP_KEY required
+world-state-ingest fetch airnow    # AIRNOW_API_KEY required
+world-state-ingest fetch eia       # EIA_API_KEY required
 ```
 
-No ECCC or NWS API key is required.
-
-## Run synthetic mode
-
-```bash
-world-state-generate
-streamlit run app/Home.py
-```
-
-In the World State page, select **Synthetic forecast**. Generated artifacts are stored at:
-
-- `data/processed/environment.zarr`
-- `data/predictions/forecasts.parquet`
-- `data/predictions/metrics.parquet`
-
-## Run live ingestion
-
-Fetch either source manually:
-
-```bash
-world-state-ingest fetch eccc
-world-state-ingest fetch nws
-```
-
-Fetch all enabled implemented sources once:
+Fetch all sources whose `enabled` flag is true:
 
 ```bash
 world-state-ingest fetch all
-# equivalent development worker invocation
-python -m world_state.ingest.worker --once
 ```
 
-Run the continuously scheduled worker in a separate terminal:
+Run only sources with both `enabled: true` and `scheduled: true` continuously:
 
 ```bash
-python -m world_state.ingest.worker
+world-state-worker
 ```
 
-Then start the GUI independently:
+METAR and ProbSevere are scheduled by default. RTMA, MRMS, and HRRR are live-capable but manual by
+default because their download volume is meaningful on a personal machine. Enable scheduling in
+`configs/sources.yaml` after choosing a suitable cadence and storage budget. NOMADS requests use
+server-side geographic, level, and variable filters; Atlas never requests an entire NOAA archive.
+
+Source notes:
+
+- METAR uses Aviation Weather's once-per-minute bulk CSV cache instead of polling a small station
+  list.
+- RTMA and HRRR use NOAA NOMADS filters for the configured CONUS bounding box and selected fields.
+- MRMS downloads only four current two-dimensional products, then stores a research-scale bounded
+  grid.
+- ProbSevere discovers the newest published GeoJSON collection and preserves both its valid and
+  production timestamps.
+- HRRR keeps every downloaded run/horizon under a content-stable identity. Regular cycles retain
+  +1/+3/+6/+12 h; the latest complete 00/06/12/18 UTC extended cycle also retains +24/+48 h.
+- GOES uses the operational GOES-19 public bucket, storing only channels 08/13 and a short GLM
+  flash window rather than full satellite archives.
+- USGS uses a configured gauge set so the initial local archive stays useful and bounded.
+- FIRMS, AirNow, and EIA adapters are implemented but disabled until their corresponding
+  environment-variable API key is present.
+
+Endpoints, bounding boxes, variables, cadences, retry behavior, and schedule flags are all visible
+in `configs/sources.yaml`.
+
+## Run the Explorer
 
 ```bash
 streamlit run app/Home.py
 ```
 
-Source cadences, station subsets, endpoints, timeouts, retries, and enabled state live in
-`configs/sources.yaml`. The defaults schedule ECCC and NWS every ten minutes. One provider failure
-does not stop another provider's run.
+The Atlas State Explorer is organized by `Atmosphere | Radar | Satellite | Hydrology | Fire | Air |
+Energy`. Implemented layers provide:
 
-Inspect feed health without the GUI:
+- analyzed rasters and METAR overlays;
+- MRMS rasters and ProbSevere polygons;
+- time selection, spatial anomaly, and spatial percentile views;
+- source, product, valid, availability, ingestion, run, and horizon provenance;
+- HRRR run/horizon selection and comparison with a matching eventual analysis when one exists;
+- an explicit synthetic forecast mode that is never presented as live data.
+
+The Data Feeds page and CLI health command derive status from real ingestion attempts:
 
 ```bash
 world-state-ingest health
+world-state-ingest catalog grid_assets
+world-state-ingest catalog forecast_runs
 ```
 
-## Storage and provenance
-
-Raw responses are archived without overwrite under:
+## Storage and deduplication
 
 ```text
-data/raw/{source}/YYYY/MM/DD/
+data/raw/{source}/YYYY/MM/DD/                         immutable source bytes
+data/normalized/point_observations/source=.../       append-only Parquet
+data/normalized/grid_fields/source=.../              append-only Zarr
+data/normalized/forecast_fields/source=.../          immutable run/horizon Zarr
+data/normalized/event_collections/source=.../        GeoParquet
+data/metadata/ingestion.duckdb                       ledger and catalogs
 ```
 
-Normalized point observations are append-only, partitioned Parquet under:
+DuckDB's `point_record_ids` table is the deduplication index. An append asks that compact table
+which IDs are new; it does not scan historical Parquet files. `latest_point_state`,
+`point_partitions`, `grid_assets`, `forecast_runs`, `event_assets`, and `source_freshness` support
+fast UI and research queries while history remains append-only.
 
-```text
-data/normalized/point_observations/source={source}/date=YYYY-MM-DD/
-```
+Every artifact preserves source/product identity, data class, valid time, source availability time,
+local ingestion time, and source URL. Forecasts also preserve reference time and horizon. Raw
+responses and normalized forecast cycles are never overwritten.
 
-The DuckDB ledger is `data/metadata/ingestion.duckdb`. It records each running, successful,
-partial, or failed attempt, including byte counts, new-record counts, error text, and the latest
-source timestamp.
+## Point-in-time research queries
 
-Every normalized point retains:
-
-- source and source product;
-- `OBSERVED`, `ANALYZED`, `FORECAST`, `DERIVED`, or `SYNTHETIC` class;
-- measurement valid time;
-- when the value was available to this system (ECCC source processing time when supplied);
-- local ingestion time;
-- station/source identifiers and quality flag;
-- location, variable, canonical value, and unit;
-- forecast reference time and horizon fields for future forecast providers.
-
-Canonical point units are Celsius, hectopascals, percent, metres per second, angular degrees, and
-millimetres. Missing source values are omitted rather than replaced with zeros.
-
-## Tests
+Atlas treats source availability and local ingestion as separate facts. A state query includes an
+artifact only when both timestamps are at or before `T`:
 
 ```bash
-pytest
-ruff check .
+world-state-ingest state-at 2026-08-30T23:45:00Z
 ```
 
-Tests use checked-in response fixtures and mocked HTTP transports; they do not require public API
-availability. They cover parsing, missing values, UTC conversion, unit conversion, retry behavior,
-duplicate prevention, synthetic leakage checks, and Streamlit page execution.
+In Python:
 
+```python
+from datetime import UTC, datetime
+from world_state.ingest.catalog import AtlasCatalog
+
+state = AtlasCatalog().assets_available_at(datetime(2026, 8, 30, 23, 45, tzinfo=UTC))
+# state["points"], state["grids"], state["events"], state["forecasts"]
+```
+
+This is the foundation for leakage-safe samples of `state(T) -> state(T + delta)`. Initial targets
+are precipitation at +1/+3/+6 h, reflectivity evolution, extreme-precipitation probability, and
+severe-storm probability using RTMA + MRMS + GOES + METAR + HRRR.
+
+## Synthetic lab and tests
+
+```bash
+world-state-generate
+pytest
+ruff check src app tests
+```
+
+Tests use fixtures and mocked transports rather than depending on live services. They cover point,
+grid, forecast, and event routing; GeoParquet metadata; catalog-based deduplication; point-in-time
+availability; provider parsing; HTTP retry behavior; provenance; and Streamlit execution.

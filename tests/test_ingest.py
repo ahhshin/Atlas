@@ -7,12 +7,13 @@ import httpx
 import pytest
 
 from world_state.ingest.base import DataClass, DataSource, RawPayload, utc_datetime
+from world_state.ingest.catalog import AtlasCatalog
 from world_state.ingest.http import get_json_bytes
 from world_state.ingest.ledger import IngestionLedger
 from world_state.ingest.providers.eccc import ECCCProvider
 from world_state.ingest.providers.nws import NWSProvider
 from world_state.ingest.runner import run_provider
-from world_state.ingest.storage import PointObservationStore, RawArchive
+from world_state.ingest.storage import PointObservationStore, RawArchive, StorageRouter
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INGESTED_AT = datetime(2026, 8, 29, 18, 5, tzinfo=UTC)
@@ -30,7 +31,7 @@ def test_utc_normalization_handles_offsets_and_naive_values():
 
 def test_eccc_normalizes_available_values_and_converts_wind_speed():
     provider = ECCCProvider({}, {})
-    records = provider.normalize([payload("eccc_swob.json")], INGESTED_AT)
+    records = provider.normalize([payload("eccc_swob.json")], INGESTED_AT)[0].records
     by_variable = {record.variable: record for record in records}
 
     assert set(by_variable) == {
@@ -50,7 +51,7 @@ def test_eccc_normalizes_available_values_and_converts_wind_speed():
 
 def test_nws_normalizes_units_and_skips_null_measurements():
     provider = NWSProvider({}, {})
-    records = provider.normalize([payload("nws_observation.json")], INGESTED_AT)
+    records = provider.normalize([payload("nws_observation.json")], INGESTED_AT)[0].records
     by_variable = {record.variable: record for record in records}
 
     assert "precipitation" not in by_variable
@@ -86,7 +87,7 @@ def test_http_retry_recovers_from_timeout():
 
 def test_duplicate_observations_are_not_appended_twice(tmp_path: Path):
     provider = NWSProvider({}, {})
-    records = provider.normalize([payload("nws_observation.json")], INGESTED_AT)
+    records = provider.normalize([payload("nws_observation.json")], INGESTED_AT)[0].records
     store = PointObservationStore(tmp_path / "points")
 
     assert store.append(records, "first") == len(records)
@@ -125,7 +126,7 @@ def test_provider_failure_is_recorded_and_does_not_escape_runner(tmp_path: Path)
             client=client,
             ledger=ledger,
             raw_archive=RawArchive(tmp_path / "raw"),
-            point_store=PointObservationStore(tmp_path / "points"),
+            storage_router=StorageRouter(catalog=AtlasCatalog(tmp_path / "ledger.duckdb")),
             now=INGESTED_AT,
         )
 

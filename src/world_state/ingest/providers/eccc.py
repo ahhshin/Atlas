@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from world_state.ingest.artifacts import PointBatch
 from world_state.ingest.base import DataClass, DataSource, NormalizedPoint, RawPayload, utc_datetime
 from world_state.ingest.http import get_json_bytes
 
@@ -83,7 +84,7 @@ class ECCCProvider(DataSource):
             raise RuntimeError("; ".join(self.fetch_errors))
         return payloads
 
-    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[NormalizedPoint]:
+    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[PointBatch]:
         records: list[NormalizedPoint] = []
         for payload in payloads:
             document = json.loads(payload.content)
@@ -135,4 +136,4 @@ class ECCCProvider(DataSource):
                             station_name=station_name,
                         )
                     )
-        return records
+        return [PointBatch(tuple(records))] if records else []

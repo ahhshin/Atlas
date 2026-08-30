@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from world_state.config import load_config
+from world_state.ingest.catalog import AtlasCatalog
 from world_state.ingest.ledger import IngestionLedger
 
 st.set_page_config(page_title="Data feeds", page_icon="◉", layout="wide")
@@ -62,3 +63,10 @@ else:
     )
 
 st.markdown("Run a one-time refresh with `world-state-ingest fetch all`.")
+
+catalog = AtlasCatalog()
+counts = st.columns(4)
+counts[0].metric("Current point values", f"{len(catalog.table('latest_point_state')):,}")
+counts[1].metric("Grid assets", f"{len(catalog.table('grid_assets')):,}")
+counts[2].metric("Forecast horizons", f"{len(catalog.table('forecast_runs')):,}")
+counts[3].metric("Event collections", f"{len(catalog.table('event_assets')):,}")

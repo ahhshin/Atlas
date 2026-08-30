@@ -5,9 +5,12 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from world_state.ingest.artifacts import NormalizedArtifact
 
 
 class DataClass(StrEnum):
@@ -41,8 +44,8 @@ class NormalizedPoint:
     valid_time: datetime
     available_at: datetime
     ingested_at: datetime
-    latitude: float
-    longitude: float
+    latitude: float | None
+    longitude: float | None
     variable: str
     value: float
     unit: str
@@ -82,5 +85,7 @@ class DataSource(ABC):
         """Fetch source-native payloads without altering their content."""
 
     @abstractmethod
-    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[NormalizedPoint]:
-        """Convert raw payloads to canonical point observations."""
+    def normalize(
+        self, payloads: list[RawPayload], ingested_at: datetime
+    ) -> list[NormalizedArtifact]:
+        """Convert raw payloads to one or more normalized artifact types."""

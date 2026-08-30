@@ -5,6 +5,7 @@ from datetime import datetime
 
 import httpx
 
+from world_state.ingest.artifacts import PointBatch
 from world_state.ingest.base import DataClass, DataSource, NormalizedPoint, RawPayload, utc_datetime
 from world_state.synthetic import build_synthetic_dataset
 from world_state.variables import VARIABLES
@@ -20,7 +21,7 @@ class SyntheticProvider(DataSource):
         content = json.dumps({"seed": 42, "periods": 80, "generator": self.product}).encode()
         return [RawPayload("synthetic-manifest", content, "local://world_state.synthetic")]
 
-    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[NormalizedPoint]:
+    def normalize(self, payloads: list[RawPayload], ingested_at: datetime) -> list[PointBatch]:
         del payloads
         ds = build_synthetic_dataset()
         latest = ds.isel(time=-1)
@@ -50,4 +51,4 @@ class SyntheticProvider(DataSource):
                             quality_flag="synthetic",
                         )
                     )
-        return records
+        return [PointBatch(tuple(records))] if records else []

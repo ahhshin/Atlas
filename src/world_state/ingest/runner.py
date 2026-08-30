@@ -6,9 +6,10 @@ from datetime import UTC, datetime
 
 import httpx
 
+from world_state.ingest.artifacts import EventCollection, ForecastField, GridField, PointBatch
 from world_state.ingest.base import DataSource
 from world_state.ingest.ledger import IngestionLedger
-from world_state.ingest.storage import PointObservationStore, RawArchive
+from world_state.ingest.storage import RawArchive, StorageRouter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def run_provider(
     client: httpx.Client,
     ledger: IngestionLedger,
     raw_archive: RawArchive,
-    point_store: PointObservationStore,
+    storage_router: StorageRouter,
     now: datetime | None = None,
 ) -> IngestionOutcome:
     started_at = now or datetime.now(UTC)
@@ -39,11 +40,32 @@ def run_provider(
     try:
         payloads = provider.fetch(client, started_at)
         raw_archive.write(provider.name, run_id, payloads, started_at)
-        records = provider.normalize(payloads, started_at)
-        if not records:
-            raise ValueError("Provider returned no usable normalized observations")
-        written = point_store.append(records, run_id)
-        latest = max(record.valid_time for record in records)
+        artifacts = provider.normalize(payloads, started_at)
+        if not artifacts:
+            raise ValueError("Provider returned no usable normalized artifacts")
+        result = storage_router.write(artifacts, run_id)
+        valid_times = []
+        source_times = []
+        available_times = []
+        normalized_objects = 0
+        for artifact in artifacts:
+            if isinstance(artifact, PointBatch):
+                valid_times.extend(record.valid_time for record in artifact.records)
+                source_times.extend(record.valid_time for record in artifact.records)
+                available_times.extend(record.available_at for record in artifact.records)
+                normalized_objects += len(artifact.records)
+            elif isinstance(artifact, (GridField, EventCollection)):
+                valid_times.append(artifact.provenance.valid_time)
+                source_times.append(
+                    artifact.provenance.forecast_reference_time
+                    if isinstance(artifact, ForecastField)
+                    else artifact.provenance.valid_time
+                )
+                available_times.append(artifact.provenance.available_at)
+                normalized_objects += 1
+        latest_valid = max(valid_times)
+        latest_source = max(source_times)
+        latest_available = max(available_times)
         status = "partial" if provider.fetch_errors else "success"
         error_message = "; ".join(provider.fetch_errors) or None
         completed_at = datetime.now(UTC)
@@ -51,17 +73,26 @@ def run_provider(
             run_id,
             status=status,
             completed_at=completed_at,
-            latest_source_timestamp=latest,
-            records_or_objects=len(records),
+            latest_source_timestamp=latest_source,
+            records_or_objects=normalized_objects,
             bytes_downloaded=sum(len(payload.content) for payload in payloads),
             error_message=error_message,
+        )
+        storage_router.catalog.update_freshness(
+            provider.name,
+            provider.product,
+            completed_at,
+            status,
+            latest_valid,
+            latest_available,
+            error_message,
         )
         LOGGER.info(
             "source=%s product=%s status=%s records=%d payloads=%d bytes=%d",
             provider.name,
             provider.product,
             status,
-            written,
+            result.records_written or result.artifacts_written,
             len(payloads),
             sum(len(payload.content) for payload in payloads),
         )
@@ -69,9 +100,9 @@ def run_provider(
             run_id,
             provider.name,
             status,
-            written,
+            result.records_written or result.artifacts_written,
             len(payloads),
-            latest,
+            latest_source,
             error_message,
         )
     # A worker must isolate arbitrary provider/parser/storage failures from other sources.
@@ -84,6 +115,15 @@ def run_provider(
             records_or_objects=0,
             bytes_downloaded=sum(len(payload.content) for payload in payloads),
             error_message=str(error),
+        )
+        storage_router.catalog.update_freshness(
+            provider.name,
+            provider.product,
+            completed_at,
+            "failed",
+            None,
+            None,
+            str(error),
         )
         LOGGER.error(
             "source=%s product=%s status=failed error=%s", provider.name, provider.product, error

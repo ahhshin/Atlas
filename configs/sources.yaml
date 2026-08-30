@@ -2,7 +2,7 @@ http:
   timeout_seconds: 20
   retries: 3
   backoff_seconds: 0.5
-  user_agent: "world-state-personal-research/0.1 (set WORLD_STATE_CONTACT for contact)"
+  user_agent: "atlas-personal-research/0.2 (set WORLD_STATE_CONTACT for contact)"
 
 sources:
   synthetic:
@@ -18,43 +18,120 @@ sources:
     stations: [CYYZ, CYUL, CYVR, CYYC, CYWG]
 
   nws:
-    enabled: true
-    scheduled: true
+    enabled: false
+    scheduled: false
     cadence_minutes: 10
     endpoint: "https://api.weather.gov/stations/{station}/observations/latest"
     stations: [KSEA, KSFO, KLAX, KDEN, KDFW, KORD, KATL, KJFK, KBOS, KMIA]
 
+  metar:
+    enabled: true
+    scheduled: true
+    cadence_minutes: 5
+    endpoint: "https://aviationweather.gov/data/cache/metars.cache.csv.gz"
+    bbox: [-170, 15, -50, 75]
+
   rtma:
-    enabled: false
+    enabled: true
     scheduled: false
     cadence_minutes: 60
+    directory: "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtma/prod/rtma2p5.{date}/"
+    filter_endpoint: "https://nomads.ncep.noaa.gov/cgi-bin/filter_rtma2p5.pl"
+    bbox: [-125, 24, -66, 50]
+    storage_resolution_degrees: 0.25
+
+  mrms:
+    enabled: true
+    scheduled: false
+    cadence_minutes: 10
+    base_url: "https://mrms.ncep.noaa.gov/data/2D"
+    bbox: [-125, 24, -66, 50]
+    storage_resolution_degrees: 0.25
+    products:
+      - MergedBaseReflectivityQC
+      - PrecipRate
+      - MultiSensor_QPE_01H_Pass2
+      - MESH
+
+  probsevere:
+    enabled: true
+    scheduled: true
+    cadence_minutes: 2
+    directory: "https://mrms.ncep.noaa.gov/ProbSevere/PROBSEVERE/"
+    bbox: [-125, 24, -66, 50]
 
   hrrr:
-    enabled: false
+    enabled: true
     scheduled: false
     cadence_minutes: 60
+    directory: "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.{date}/conus/"
+    filter_endpoint: "https://nomads.ncep.noaa.gov/cgi-bin/filter_hrrr_2d.pl"
+    bbox: [-125, 24, -66, 50]
+    storage_resolution_degrees: 0.25
+    horizons: [1, 3, 6, 12, 24, 48]
+    extended_cycles: [0, 6, 12, 18]
 
   goes:
-    enabled: false
+    enabled: true
     scheduled: false
     cadence_minutes: 5
+    bucket_url: "https://noaa-goes19.s3.amazonaws.com"
+    bbox: [-125, 24, -66, 50]
+    storage_resolution_degrees: 0.25
+    abi_channels: [8, 13]
+    glm_files: 15
 
   firms:
     enabled: false
     scheduled: false
     cadence_minutes: 15
+    endpoint: "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{map_key}/{source}/{area}/{days}"
+    api_key_env: FIRMS_MAP_KEY
+    source: VIIRS_SNPP_NRT
+    bbox: [-170, 15, -50, 75]
+    days: 1
 
   openaq:
     enabled: false
     scheduled: false
     cadence_minutes: 15
 
-  usgs:
+  airnow:
     enabled: false
     scheduled: false
+    cadence_minutes: 60
+    endpoint: "https://www.airnowapi.org/aq/data/"
+    api_key_env: AIRNOW_API_KEY
+    bbox: [-125, 24, -66, 50]
+    parameters: [PM25, PM10, OZONE, CO, NO2, SO2]
+    lookback_hours: 2
+
+  usgs:
+    enabled: true
+    scheduled: false
     cadence_minutes: 10
+    endpoint: "https://waterservices.usgs.gov/nwis/iv/"
+    parameters: ["00060", "00065"]
+    period: P1D
+    sites:
+      - "01646500"
+      - "01463500"
+      - "05586100"
+      - "07010000"
+      - "07374000"
+      - "08158000"
+      - "06752260"
+      - "09402500"
+      - "12113000"
+      - "11447650"
+      - "11274500"
 
   eia:
     enabled: false
     scheduled: false
     cadence_minutes: 60
+    endpoint: "https://api.eia.gov/v2/electricity/rto/region-data/data/"
+    api_key_env: EIA_API_KEY
+    types: [D, NG]
+    lookback_hours: 6
+    length: 5000
