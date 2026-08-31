@@ -323,6 +323,108 @@ future improvement rather than something hidden behind a threshold metric.
 Atlas Mini is an initial research experiment for validating data, leakage, training, and evaluation
 infrastructure. It is not intended to beat or replace operational numerical weather prediction.
 
+## Latent World Model V0
+
+`Atlas Latent World Model V0` asks whether the existing ten-channel ERA5 state can be compressed
+into a reusable, geographically structured representation and predicted three hours forward. It
+does not download or duplicate ERA5. Every run reads `atlas-mini-precip-v1` in place and writes
+only checkpoints, metadata, selected maps, PCA coordinates, and nearest-neighbor diagnostics under
+that dataset's `latent_world/` directory on the configured SSD.
+
+The model is deliberately small:
+
+```text
+normalized X(t) + explicit missing masks
+  → regional convolutional encoder
+  → Z(t) [D × ceil(latitude/4) × ceil(longitude/4)]
+  → spatial 3×3 ConvGRU over eight 3-hour latent maps
+  → Ẑ(t+3h)
+  → convolutional decoder
+  → normalized X̂(t+3h)
+```
+
+The full 105×237 physical grid is padded to 108×240 internally, producing a 27×60 regional map,
+then cropped exactly back to 105×237 after decoding. A token therefore represents approximately a
+1°×1° region. Missing physical values are zero-filled only after normalization and are always
+accompanied by one explicit mask channel per variable; masked targets do not contribute to loss.
+
+Training is staged. The encoder/decoder first establish a stable reconstruction space. The encoder
+and decoder are then frozen while the ConvGRU learns both latent and decoded physical losses.
+Finally, the encoder is frozen and a 1×1 probability head tests whether Z(t) supports the existing
+next-six-hour extreme-precipitation target. Each stage restores its best validation epoch.
+
+### Install and run
+
+PyTorch is optional so the live platform and precipitation experiment remain lightweight. For a
+CPU-only local installation, install the official CPU wheel before the project extra:
+
+```bash
+source .venv/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e '.[dev,latent]'
+export ATLAS_DATA_ROOT=/mnt/games/Atlas/data
+```
+
+Run the bounded real-data D=32/D=64 smoke ablation:
+
+```bash
+atlas-research latent-smoke configs/research/latent_world_smoke.yaml
+```
+
+Run individual full-grid stages. Dynamics and probe automatically resume the latest compatible
+autoencoder unless `--experiment-id` is supplied:
+
+```bash
+atlas-research latent-train configs/research/latent_world_v0.yaml --stage autoencoder
+atlas-research latent-train configs/research/latent_world_v0.yaml --stage dynamics
+atlas-research latent-train configs/research/latent_world_v0.yaml --stage probe
+atlas-research latent-evaluate <experiment-id>
+```
+
+`latent_world_v0_d32.yaml` provides the matching D=32 full-grid configuration. The full configs
+use chronologically distributed bounded samples because this is a local CPU experiment, not a
+claim to exhaustive training. Their spatial extent remains the complete CONUS grid. Selected
+samples may be temporarily cached in capped RAM; they are never persisted as a second state
+dataset. Estimated persistent output is printed before training. Latent artifacts have a separate
+2 GiB cap and still count toward the existing 15 GiB dataset cap.
+
+### Completed V0 results
+
+The checked local run `20260831T221147Z-latent-d64-20c756af` used 64/16/16 chronological
+train/validation/test timestamps on the complete grid, D=64, three epochs per stage, and 415,531
+total parameters. It stores 27.9 MiB of artifacts; all five completed latent runs together use
+about 34.0 MiB.
+
+| Result | V0 D=64 |
+| --- | ---: |
+| Latent grid | 27×60×64 |
+| Physical-to-latent element compression | 2.40× |
+| Reconstruction normalized RMSE | 0.626 |
+| Physical persistence normalized RMSE at +3h | 0.488 |
+| Decoded latent persistence normalized RMSE | 0.692 |
+| Decoded learned dynamics normalized RMSE | 0.661 |
+| Latent persistence MSE | 0.346 |
+| Learned latent prediction MSE | 0.208 |
+| Frozen probe PR-AUC / ROC-AUC | 0.156 / 0.685 |
+| Engineered-feature reference PR-AUC / ROC-AUC | 0.464 / 0.923 |
+
+The learned dynamics improves decoded RMSE by about 4.6% over latent persistence and reduces
+latent MSE by about 40%, demonstrating predictable structure in Z. It does **not** beat direct
+physical persistence overall; its normalized RMSE is about 35.5% worse. Downward solar radiation
+is a notable exception, with physical RMSE about 26.3% better than persistence. The frozen probe
+contains measurable precipitation ranking signal but remains well behind the engineered-feature
+model and is poorly calibrated. These are V0 findings, not evidence of a complete Earth model.
+
+The controlled crop smoke ablation keeps all settings identical. D=32 provides 5.0× compression;
+D=64 provides 2.5×. D=64 produced a substantially stronger frozen probe in this small run, while
+neither size reliably beat physical persistence. That result supports testing representation size
+without claiming that more dimensions are universally better.
+
+Open **Experiments → Historical · Latent World Model** for model/config provenance, D=32/D=64
+comparison, actual versus reconstructed fields, physical and latent persistence comparisons,
+three-hour predictions and error maps, latent magnitude/change/prediction error, PCA projections,
+nearest regional states, per-variable physical metrics, and frozen-probe calibration.
+
 ## Synthetic lab and tests
 
 ```bash

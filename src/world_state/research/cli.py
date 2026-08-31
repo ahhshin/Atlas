@@ -35,6 +35,23 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate = commands.add_parser("evaluate", help="show saved experiment metrics")
     evaluate.add_argument("experiment_id")
     evaluate.add_argument("--data-root", type=Path)
+    latent_smoke = commands.add_parser(
+        "latent-smoke", help="run all latent-world stages on a bounded real-data subset"
+    )
+    latent_smoke.add_argument("config", type=Path)
+    latent_train = commands.add_parser(
+        "latent-train", help="train one staged latent-world component"
+    )
+    latent_train.add_argument("config", type=Path)
+    latent_train.add_argument(
+        "--stage", choices=("autoencoder", "dynamics", "probe"), required=True
+    )
+    latent_train.add_argument("--experiment-id")
+    latent_evaluate = commands.add_parser(
+        "latent-evaluate", help="show saved latent-world experiment metrics"
+    )
+    latent_evaluate.add_argument("experiment_id")
+    latent_evaluate.add_argument("--data-root", type=Path)
     return parser
 
 
@@ -43,6 +60,35 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "evaluate":
         data_root = args.data_root or Path("/mnt/games/Atlas/data")
         print(json.dumps(evaluate_experiment(args.experiment_id, data_root), indent=2))
+        return
+    if args.command in {"latent-smoke", "latent-train", "latent-evaluate"}:
+        from world_state.research.latent_config import LatentWorldConfig
+        from world_state.research.latent_experiments import (
+            evaluate_latent_experiment,
+            run_latent_smoke,
+            train_latent_stage,
+        )
+
+        if args.command == "latent-evaluate":
+            data_root = args.data_root or Path("/mnt/games/Atlas/data")
+            print(
+                json.dumps(
+                    evaluate_latent_experiment(args.experiment_id, data_root),
+                    indent=2,
+                )
+            )
+            return
+        latent_config = LatentWorldConfig.from_yaml(args.config)
+        result = (
+            run_latent_smoke(latent_config)
+            if args.command == "latent-smoke"
+            else train_latent_stage(
+                latent_config,
+                args.stage,
+                experiment_id=args.experiment_id,
+            )
+        )
+        print(json.dumps(result, indent=2, default=str, allow_nan=True))
         return
     config = ResearchConfig.from_yaml(args.config)
     if args.command == "estimate":

@@ -1,0 +1,41 @@
+name: atlas-latent-world-v0-d32
+dataset: atlas-mini-precip-v1
+
+latent:
+  patch_size: 4
+  dimensions: 32
+
+ablation_dimensions: [32]
+context_hours: 24
+forecast_hours: 3
+cadence_hours: 3
+hidden_channels: 48
+max_parameters: 10000000
+
+storage_root: /mnt/games/Atlas/data
+required_mount: /mnt/games
+max_storage_gb: 15
+additional_artifact_cap_gb: 2
+
+loss:
+  latent_weight: 1.0
+  physical_weight: 1.0
+  reconstruction: huber
+
+training:
+  random_seed: 2020
+  device: auto
+  torch_threads: 4
+  batch_size: 2
+  learning_rate: 0.001
+  fine_tune_learning_rate: 0.0001
+  autoencoder_epochs: 3
+  dynamics_epochs: 3
+  probe_epochs: 3
+  max_train_samples: 64
+  max_validation_samples: 16
+  max_test_samples: 16
+  diagnostic_samples: 4
+  num_workers: 0
+  cache_samples_in_memory: true
+  max_memory_cache_gb: 2.0
