@@ -1,0 +1,64 @@
+name: atlas-mini-precip-v1
+
+start: 2020-01-01
+end: 2022-12-31
+
+bbox:
+  west: -125
+  south: 24
+  east: -66
+  north: 50
+
+resolution_degrees: 0.25
+cadence_hours: 3
+context_hours: 24
+target_hours: 6
+percentile: 0.95
+max_storage_gb: 15
+
+# ATLAS_DATA_ROOT overrides this path. required_mount prevents fallback to the system disk.
+storage_root: /mnt/games/Atlas/data
+required_mount: /mnt/games
+
+source:
+  type: earthmover-era5
+  bucket: earthmover-icechunk-era5
+  prefix: icechunkV2
+  region: us-east-1
+  branch: main
+  group: single/temporal
+
+variables:
+  - temperature_2m
+  - dewpoint_2m
+  - surface_pressure
+  - u_wind_10m
+  - v_wind_10m
+  - total_precipitation
+  - total_cloud_cover
+  - surface_solar_radiation_downwards
+  - soil_moisture_layer_1
+  - skin_temperature
+
+splits:
+  train:
+    start: 2020-01-01
+    end: 2021-12-31
+  validation:
+    start: 2022-01-01
+    end: 2022-06-30
+  test:
+    start: 2022-07-01
+    end: 2022-12-31
+
+chunks:
+  time: 8
+  latitude: 32
+  longitude: 32
+
+training:
+  random_seed: 2020
+  samples_per_time: 64
+  max_train_samples: 300000
+  max_eval_samples: 150000
+  max_replay_times: 64

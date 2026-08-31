@@ -142,7 +142,7 @@ def write_demo_data(output_root: Path | None = None) -> tuple[Path, Path, Path]:
     metrics = aggregate_metrics(forecasts)
     chunk_shape = (16, ds.sizes["latitude"], ds.sizes["longitude"])
     encoding = {variable: {"chunks": chunk_shape} for variable in ds.data_vars}
-    ds.to_zarr(observations_path, mode="w", encoding=encoding)
+    ds.to_zarr(observations_path, mode="w", encoding=encoding, zarr_format=2)
     forecasts.to_parquet(forecasts_path, index=False)
     metrics.to_parquet(metrics_path, index=False)
     return observations_path, forecasts_path, metrics_path

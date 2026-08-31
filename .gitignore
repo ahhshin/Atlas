@@ -4,8 +4,4 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 .streamlit/
-data/processed/
-data/predictions/
-data/raw/
-data/normalized/
-data/metadata/
+/data

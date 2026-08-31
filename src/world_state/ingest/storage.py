@@ -187,7 +187,7 @@ class GridStore:
                     ),
                 }
             )
-            dataset.to_zarr(target, mode="w", consolidated=True)
+            dataset.to_zarr(target, mode="w", consolidated=True, zarr_format=2)
         self.catalog.register_grid(artifact, target)
         return int(created)
 
